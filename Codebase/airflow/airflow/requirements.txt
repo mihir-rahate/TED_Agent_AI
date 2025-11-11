@@ -1,0 +1,34 @@
+# psycopg2-binary
+# selenium
+# requests
+
+apache-airflow-providers-amazon
+apache-airflow-providers-snowflake
+boto3
+# beautifulsoup4
+webdriver_manager
+pymupdf
+pinecone-client
+snowflake-connector-python
+# langchain
+langchain==0.0.350
+langchain-openai==0.0.5
+# pandas
+# chromedriver-py==114.0.5735.90
+
+apache-airflow==2.7.0
+psycopg2-binary==2.9.7
+selenium==4.15.2
+requests==2.31.0
+pandas==1.5.3
+
+langchain-openai==0.0.5
+chromedriver-py==121.0.6167.85
+beautifulsoup4==4.12.2
+lxml==4.9.3
+urllib3==1.26.18
+
+apache-airflow-providers-snowflake
+# airflow.operators.python
+
+python-dotenv
