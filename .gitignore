@@ -7,6 +7,137 @@ __pycache__/
 *.so
 
 # Distribution / packaging
+build/
+dist/
+*.egg-info/
+.eggs/
+pip-wheel-metadata/
+
+# Installer logs
+pip-log.txt
+
+# Unit test / coverage
+.coverage
+.coverage.*
+.cache
+.pytest_cache/
+htmlcov/
+coverage.xml
+
+# pyenv
+.python-version
+
+# Virtual environments
+venv/
+ENV/
+env/
+.venv/
+venv*/
+
+# dotenv
+.env
+.env.*
+
+# IPython
+profile_default/
+ipython_config.py
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# Poetry
+poetry.lock
+
+# Mypy
+.mypy_cache/
+
+# Editor directories and files
+.vscode/
+.idea/
+*.sublime-workspace
+*.sublime-project
+
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db
+desktop.ini
+
+# Node
+node_modules/
+
+# Logs and temp files
+*.log
+logs/
+tmp/
+temp/
+*.tmp
+
+# Docker
+docker-compose.override.yml
+docker-compose.*.yml
+
+# Airflow (local container and project artifacts)
+/airflow/logs/
+/airflow/postgres_data/
+/airflow/.env
+/airflow/airflow.cfg
+
+# PostgreSQL
+postgres_data/
+*.sql
+*.sqlite3
+*.db
+
+# dbt
+/target/
+/dbt_packages/
+/.dbt/
+dbt/profiles/profiles.yml
+dbt/dbt_cloud.yml
+
+# Data files (ignore large/raw data by default)
+/data/
+
+# Secrets, keys
+*.pem
+*.key
+*.pub
+*.secret
+secrets.yaml
+
+# common IDE/cache
+*.swp
+*~
+.cache/
+
+# Python bytecode for compiled C extensions
+*.pyd
+
+# Coverage and test reports
+coverage/
+
+# Local build artifacts
+*.egg
+
+# End of .gitignore
+
+# ------------------------
+# Appended user-provided block
+# ------------------------
+# (This block was appended verbatim from the user's input to ensure
+# coverage of additional common patterns across frameworks and tools.)
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
 .Python
 build/
 develop-eggs/
@@ -221,3 +352,4 @@ yarn.lock
 # *.xls
 # ted_data/
 # PoC/*.csv
+

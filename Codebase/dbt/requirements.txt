@@ -1,0 +1,23 @@
+# # Core DBT
+# dbt-core==1.7.0
+# dbt-snowflake==1.7.0
+
+# # Snowflake connector
+# snowflake-connector-python==3.7.0
+
+# # Cryptography (specific version for compatibility)
+# cryptography==42.0.5
+
+# # Environment management
+# python-dotenv==1.0.0
+
+# # Optional: Additional packages
+# # pandas==2.0.3
+# # numpy==1.24.3
+
+dbt-core==1.7.0
+dbt-snowflake==1.7.0
+snowflake-connector-python==3.7.0
+cryptography==41.0.7
+protobuf==4.25.3
+python-dotenv==1.0.0
