@@ -66,20 +66,26 @@ graph TD
         S3[(AWS S3)] --> Airflow[Apache Airflow]
     end
     
-    subgraph "Snowflake Platform"
-        Airflow --> RAW[(RAW Schema)]
-        RAW --> DBT[DBT Transformation]
-        DBT --> CURATED[(CURATED Schema)]
-        DBT --> SEMANTIC[(SEMANTIC Schema)]
-        CURATED --> APP[(APP Schema)]
+    subgraph SNOWFLAKE["☁️ Snowflake Data Cloud"]
+        subgraph SCHEMAS["Database Schemas (TED_DB)"]
+            RAW[(RAW)]
+            CURATED[(CURATED)]
+            SEMANTIC[(SEMANTIC)]
+            APP[(APP)]
+        end
         
-        CORTEX[Snowflake Cortex AI]
-        CORTEX -.->|Embeddings| SEMANTIC
+        CORTEX[🧠 Snowflake Cortex AI]
+        
+        Airflow --> RAW
+        RAW --> DBT[DBT]
+        DBT --> CURATED
+        DBT --> SEMANTIC
+        CORTEX -.->|Vector Embeddings| SEMANTIC
         CORTEX -.->|LLM Inference| Agents
     end
     
     subgraph "Application Layer"
-        UI[Streamlit UI] --> LG[LangGraph Orchestrator]
+        UI[Streamlit UI] --> LG[LangGraph]
         LG --> Agents[Agent Network]
         Agents --> CURATED
         Agents --> SEMANTIC
@@ -137,11 +143,11 @@ graph LR
     C --> D[Personalized<br/>Reasoning]
     D --> E[Formatted<br/>Output]
     
-    style A fill:#e1f5fe
-    style B fill:#e1f5fe
-    style C fill:#fff3e0
-    style D fill:#fff3e0
-    style E fill:#e8f5e9
+    style A fill:#1e3a5f,color:#fff
+    style B fill:#1e3a5f,color:#fff
+    style C fill:#5c3d2e,color:#fff
+    style D fill:#5c3d2e,color:#fff
+    style E fill:#2e5a3e,color:#fff
 ```
 
 **Agents Involved:**
@@ -163,11 +169,11 @@ graph LR
     C --> D[Sequencing]
     D --> E[Learning<br/>Pathway]
     
-    style A fill:#e1f5fe
-    style B fill:#e1f5fe
-    style C fill:#fff3e0
-    style D fill:#fff3e0
-    style E fill:#e8f5e9
+    style A fill:#1e3a5f,color:#fff
+    style B fill:#1e3a5f,color:#fff
+    style C fill:#5c3d2e,color:#fff
+    style D fill:#5c3d2e,color:#fff
+    style E fill:#2e5a3e,color:#fff
 ```
 
 **Output Structure:**
@@ -187,11 +193,11 @@ graph LR
     C --> D[Matrix<br/>Generation]
     D --> E[Comparison<br/>Table]
     
-    style A fill:#e1f5fe
-    style B fill:#e1f5fe
-    style C fill:#fff3e0
-    style D fill:#fff3e0
-    style E fill:#e8f5e9
+    style A fill:#1e3a5f,color:#fff
+    style B fill:#1e3a5f,color:#fff
+    style C fill:#5c3d2e,color:#fff
+    style D fill:#5c3d2e,color:#fff
+    style E fill:#2e5a3e,color:#fff
 ```
 
 **Comparison Dimensions:**
@@ -213,10 +219,10 @@ graph LR
     B --> C[Evidence<br/>Extraction]
     C --> D[Grounded<br/>Answer]
     
-    style A fill:#e1f5fe
-    style B fill:#e1f5fe
-    style C fill:#fff3e0
-    style D fill:#e8f5e9
+    style A fill:#1e3a5f,color:#fff
+    style B fill:#1e3a5f,color:#fff
+    style C fill:#5c3d2e,color:#fff
+    style D fill:#2e5a3e,color:#fff
 ```
 
 **Key Innovation:** Answers are **grounded** in transcript evidence. No hallucinations—if it's not in the talk, the system says so.
