@@ -6,33 +6,54 @@ An intelligent, multi-agent AI system designed to curate, recommend, and analyze
 
 ## 🏗️ Architecture
 
-The system follows a **Hub-and-Spoke** agentic architecture orchestrated by LangGraph:
+The system follows a **Hub-and-Spoke** agentic architecture orchestrated by LangGraph, where specialized sub-graphs handle complex tasks:
 
 ```mermaid
 graph TD
-    User-->Router[Router Agent]
-    Router-->|Intent: Search|Search[Semantic Search Agent]
-    Router-->|Intent: Playlist|Playlist[Playlist Generator]
-    Router-->|Intent: Compare|Compare[Comparison Agent]
-    Router-->|Intent: Summarize|Sum[Video Summarizer]
-    Router-->|Intent: QA|QA[QA Pipeline]
+    User((User)) --> Router[Router Agent]
     
-    Search-->Rank[Relevance Ranker]
-    Rank-->Reason[Reasoning Engine]
-    Reason-->Final[Response Formatter]
+    %% Main Router Branches
+    Router -->|Intent: Search| RecPipeline[Recommendation Pipeline]
+    Router -->|Intent: Playlist| Playlist[Playlist Generator Agent]
+    Router -->|Intent: Compare| Compare[Comparison Agent]
+    Router -->|Intent: Summarize| Summarizer[Video Summarizer]
+    Router -->|Intent: QA| QAResolver[Resolution Node]
+
+    %% Recommendation Sub-Graph
+    subgraph "Recommendation Pipeline"
+        RecPipeline --> Intent[Intent Agent]
+        Intent --> Search[Semantic Search]
+        Search --> Rank[Relevance Ranker]
+        Rank --> Reason[Reasoning Engine]
+        Reason --> Final[Response Formatter]
+    end
+
+    %% QA Sub-Graph
+    subgraph "QA & Summarization"
+        QAResolver -->|Found ID| QAGraph[QA Retrieval Pipeline]
+        QAGraph --> Retrieve[Transcript Retrieval]
+        Retrieve --> Answer[Grounded Answer]
+    end
 ```
 
-### Key Components
-1.  **Data Ingestion (Airflow)**: Daily DAGs ingest TED Talk metadata, transcripts, and images from S3 into Snowflake `RAW` schema.
-2.  **Transformation (DBT)**: Cleans and organizes data into a `CURATED` star schema (`DIM_TED_TALKS`, `FCT_TED_TALKS`).
-3.  **Semantic Layer (Snowflake Cortex)**:
-    *   Generates vector embeddings for all talks using `snowflake-arctic-embed-m`.
-    *   Enables **Hybrid Search** (Keyword + Semantic Vector Search).
-4.  **AI Orchestration (LangGraph)**:
-    *   **Router Agent**: Classifies user intent (Learning Path vs. Specific Question).
-    *   **Recommendation Agent**: Multi-step pipeline (Retrieval -> Re-ranking -> Reasoning) to ensure high-quality suggestions.
-    *   **Comparison Agent**: Analyzes metadata and transcripts to compare two or more talks side-by-side.
-5.  **Frontend (Streamlit)**: A polished, ChatGPT-style interface with chat persistence, saved playlists, and user history.
+### 🧠 Agent Network (Multi-Agent System)
+
+1.  **Router Agent**: The central dispatcher that analyzes user urgency and intent to effectively route queries.
+2.  **Recommendation Pipeline (5-Step Chain)**:
+    *   **Intent Agent**: Disambiguates vague queries (e.g., "inspiring talks" -> "Leadership/Motivation").
+    *   **Semantic Search**: performing hybrid retrieval on vector embeddings.
+    *   **Relevance Ranker**: An LLM-based re-ranker that filters noise.
+    *   **Reasoning Engine**: Generates personalized "Why this talk?" explanations.
+    *   **Formatter**: Structures the output for the UI.
+3.  **Playlist Generator Agent**: A hierarchical agent that acts as a curriculum designer. It first retrieves a pool of candidates, then logically groups them into "Foundations", "Core Concepts", and "Advanced" modules.
+4.  **Comparison Agent**: A sophisticated analyst agent that:
+    *   **Filters**: Selects the top 2-3 most relevant talks.
+    *   **Analyzes**: Extracts dimensions (Focus, Audience, Tone).
+    *   **Synthesizes**: Produces a side-by-side comparison matrix.
+5.  **QA & Summarization Pipeline**:
+    *   **Resolution Node**: First identifies *which* talk the user is asking about.
+    *   **Retrieval Agent**: Scans the full transcript to find evidence quotes.
+    *   **Grounded Answer Agent**: Synthesizes an answer using *only* the retrieved evidence to prevent hallucinations.
 
 ---
 
@@ -73,7 +94,7 @@ ted_ai_project/
 │   └── final_ddl/         # Consolidated DDL for all schemas
 ├── streamlit_app/         # Frontend Application
 │   ├── app.py             # Main Entry Point
-│   ├── langgraph_agents.py# AI Agent Definitions
+│   ├── langgraph_agents.py# AI Agent Definitions (The "Brain")
 │   └── db.py              # Snowflake Interaction Layer
 └── common/                # Shared Utilities
 ```
