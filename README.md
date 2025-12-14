@@ -11,29 +11,32 @@ The system follows a **Hub-and-Spoke** agentic architecture orchestrated by Lang
 ```mermaid
 graph TD
     User((User)) --> Router[Router Agent]
+
+    %% Shared Path for Search-Based Intents
+    Router -->|Intent: Recommend| Intent[Intent Agent]
+    Router -->|Intent: Playlist| Intent
+    Router -->|Intent: Compare| Intent
     
-    %% Main Router Branches
-    Router -->|Intent: Search| RecPipeline[Recommendation Pipeline]
-    Router -->|Intent: Playlist| Playlist[Playlist Generator Agent]
-    Router -->|Intent: Compare| Compare[Comparison Agent]
-    Router -->|Intent: Summarize| Summarizer[Video Summarizer]
-    Router -->|Intent: QA| QAResolver[Resolution Node]
+    Intent --> Search[Semantic Search]
+    
+    %% Branching after Search
+    Search -->|Recommend| Rank[Relevance Ranker]
+    Search -->|Playlist| Playlist[Playlist Generator]
+    Search -->|Compare| Compare[Comparison Agent]
+    
+    %% Recommendation Completion
+    Rank --> Reason[Reasoning Engine]
+    Reason --> Final[Final Output]
 
-    %% Recommendation Sub-Graph
-    subgraph "Recommendation Pipeline"
-        RecPipeline --> Intent[Intent Agent]
-        Intent --> Search[Semantic Search]
-        Search --> Rank[Relevance Ranker]
-        Rank --> Reason[Reasoning Engine]
-        Reason --> Final[Response Formatter]
-    end
-
-    %% QA Sub-Graph
-    subgraph "QA & Summarization"
-        QAResolver -->|Found ID| QAGraph[QA Retrieval Pipeline]
-        QAGraph --> Retrieve[Transcript Retrieval]
-        Retrieve --> Answer[Grounded Answer]
-    end
+    %% Direct Resolution Branches
+    Router -->|Intent: QA| Resolve[Resolve Talk]
+    Router -->|Intent: Summarize| Resolve
+    
+    Resolve -->|QA| QAPipe[QA Pipeline]
+    Resolve -->|Summarize| Summarizer[Video Summarizer]
+    QAPipe --> Answer[Grounded Answer]
+    
+    Router -->|Unknown| Unknown[Unknown Agent]
 ```
 
 ### 🧠 Agent Network (Multi-Agent System)
