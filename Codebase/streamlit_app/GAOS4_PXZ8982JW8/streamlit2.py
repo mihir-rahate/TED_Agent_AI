@@ -34,12 +34,48 @@ if 'chat_history' not in st.session_state:
     st.session_state.chat_history = []
 if 'user_topics' not in st.session_state:
     st.session_state.user_topics = None
+if 'debug_mode' not in st.session_state:
+    st.session_state.debug_mode = True  # Set to True for debugging
+if 'debug_logs' not in st.session_state:
+    st.session_state.debug_logs = []
+
+# Debug logging helper
+def debug_log(message, level="INFO"):
+    """Log debug messages"""
+    import traceback
+    from datetime import datetime
+    
+    timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]
+    log_entry = f"[{timestamp}] [{level}] {message}"
+    
+    if st.session_state.debug_mode:
+        st.session_state.debug_logs.append(log_entry)
+        
+        # Display in UI based on level
+        if level == "ERROR":
+            st.error(f"🐛 {message}")
+            # Show stack trace in expander
+            with st.expander("📋 Stack Trace"):
+                st.code(traceback.format_exc())
+        elif level == "WARNING":
+            st.warning(f"⚠️ {message}")
+        elif level == "SUCCESS":
+            st.success(f"✅ {message}")
+        else:
+            st.info(f"ℹ️ {message}")
 
 # Get Snowflake session
 @st.cache_resource
 def get_snowflake_session():
     """Get active Snowflake session"""
-    return get_active_session()
+    try:
+        debug_log("Attempting to get Snowflake session...")
+        session = get_active_session()
+        debug_log("Snowflake session acquired successfully", "SUCCESS")
+        return session
+    except Exception as e:
+        debug_log(f"Failed to get Snowflake session: {str(e)}", "ERROR")
+        raise
 
 # ==================== AUTHENTICATION FUNCTIONS ====================
 
@@ -128,17 +164,11 @@ def verify_user_login(email, password):
 
 # ==================== DATABASE FUNCTIONS ====================
 
-def get_all_talks():
-    """Fetch all TED talks from Snowflake"""
+def search_talks(search_query):
+    """Search TED talks by keyword"""
     session = get_snowflake_session()
-    query = """
-        WITH transcript_info AS (
-            SELECT 
-                TALK_ID,
-                SUM(LENGTH(TEXT_SEGMENT)) as TRANSCRIPT_LENGTH
-            FROM ted_db.raw.ted_transcript_segments_raw
-            GROUP BY TALK_ID
-        )
+    escaped_query = search_query.replace("'", "''")
+    query = f"""
         SELECT 
             t.TALK_ID,
             t.TITLE,
@@ -147,12 +177,38 @@ def get_all_talks():
             t.PUBLISHED_DATE,
             t.DURATION_SEC / 60.0 as DURATION_MINUTES,
             t.URL,
-            t.SLUG,
-            YEAR(t.PUBLISHED_DATE) as PUBLISHED_YEAR,
-            ti.TRANSCRIPT_LENGTH
+            YEAR(t.PUBLISHED_DATE) as PUBLISHED_YEAR
         FROM ted_db.raw.ted_talks_raw t
-        INNER JOIN transcript_info ti ON t.TALK_ID = ti.TALK_ID
+        WHERE 
+            LOWER(t.TITLE) LIKE LOWER('%{escaped_query}%')
+            OR LOWER(t.SPEAKERS) LIKE LOWER('%{escaped_query}%')
+            OR LOWER(t.TAGS) LIKE LOWER('%{escaped_query}%')
         ORDER BY t.PUBLISHED_DATE DESC
+        LIMIT 20
+    """
+    try:
+        df = session.sql(query).to_pandas()
+        return df
+    except Exception as e:
+        st.error(f"Error searching: {e}")
+        return pd.DataFrame()
+
+def get_all_talks():
+    """Fetch all TED talks from Snowflake"""
+    session = get_snowflake_session()
+    query = """
+        SELECT 
+            t.TALK_ID,
+            t.TITLE,
+            t.SPEAKERS as SPEAKER,
+            t.TAGS,
+            t.PUBLISHED_DATE,
+            t.DURATION_SEC / 60.0 as DURATION_MINUTES,
+            t.URL,
+            YEAR(t.PUBLISHED_DATE) as PUBLISHED_YEAR
+        FROM ted_db.raw.ted_talks_raw t
+        ORDER BY t.PUBLISHED_DATE DESC
+        LIMIT 50
     """
     try:
         df = session.sql(query).to_pandas()
@@ -165,29 +221,16 @@ def get_talk_by_id(talk_id):
     """Get specific talk details including transcript"""
     session = get_snowflake_session()
     query = f"""
-        WITH full_transcript AS (
-            SELECT 
-                TALK_ID,
-                LISTAGG(TEXT_SEGMENT, ' ') WITHIN GROUP (ORDER BY SEGMENT_INDEX) as TRANSCRIPT,
-                SUM(LENGTH(TEXT_SEGMENT)) as TRANSCRIPT_LENGTH
-            FROM ted_db.raw.ted_transcript_segments_raw
-            WHERE TALK_ID = '{talk_id}'
-            GROUP BY TALK_ID
-        )
         SELECT 
             t.TALK_ID,
-            t.SLUG,
             t.TITLE,
             t.SPEAKERS as SPEAKER,
             t.TAGS,
             t.PUBLISHED_DATE,
             t.DURATION_SEC / 60.0 as DURATION_MINUTES,
             t.URL,
-            ft.TRANSCRIPT,
-            ft.TRANSCRIPT_LENGTH,
             YEAR(t.PUBLISHED_DATE) as PUBLISHED_YEAR
         FROM ted_db.raw.ted_talks_raw t
-        LEFT JOIN full_transcript ft ON t.TALK_ID = ft.TALK_ID
         WHERE t.TALK_ID = '{talk_id}'
     """
     try:
@@ -196,83 +239,6 @@ def get_talk_by_id(talk_id):
     except Exception as e:
         st.error(f"Error fetching talk: {e}")
         return None
-
-def get_talk_by_title(title):
-    """Get talk by title"""
-    session = get_snowflake_session()
-    escaped_title = title.replace("'", "''")
-    query = f"""
-        WITH full_transcript AS (
-            SELECT 
-                TALK_ID,
-                LISTAGG(TEXT_SEGMENT, ' ') WITHIN GROUP (ORDER BY SEGMENT_INDEX) as TRANSCRIPT
-            FROM ted_db.raw.ted_transcript_segments_raw
-            GROUP BY TALK_ID
-        )
-        SELECT 
-            t.TALK_ID,
-            t.TITLE,
-            t.SPEAKERS as SPEAKER,
-            t.TAGS,
-            t.PUBLISHED_DATE,
-            t.DURATION_SEC / 60.0 as DURATION_MINUTES,
-            t.URL,
-            ft.TRANSCRIPT,
-            YEAR(t.PUBLISHED_DATE) as PUBLISHED_YEAR
-        FROM ted_db.raw.ted_talks_raw t
-        LEFT JOIN full_transcript ft ON t.TALK_ID = ft.TALK_ID
-        WHERE t.TITLE = '{escaped_title}'
-        LIMIT 1
-    """
-    try:
-        df = session.sql(query).to_pandas()
-        return df.iloc[0] if not df.empty else None
-    except Exception as e:
-        st.error(f"Error fetching talk: {e}")
-        return None
-
-def search_talks(search_query):
-    """Search TED talks by keyword"""
-    session = get_snowflake_session()
-    escaped_query = search_query.replace("'", "''")
-    query = f"""
-        WITH transcript_search AS (
-            SELECT DISTINCT TALK_ID
-            FROM ted_db.raw.ted_transcript_segments_raw
-            WHERE LOWER(TEXT_SEGMENT) LIKE LOWER('%{escaped_query}%')
-        ),
-        transcript_info AS (
-            SELECT 
-                TALK_ID,
-                SUM(LENGTH(TEXT_SEGMENT)) as TRANSCRIPT_LENGTH
-            FROM ted_db.raw.ted_transcript_segments_raw
-            GROUP BY TALK_ID
-        )
-        SELECT 
-            t.TALK_ID,
-            t.TITLE,
-            t.SPEAKERS as SPEAKER,
-            t.TAGS,
-            t.PUBLISHED_DATE,
-            t.DURATION_SEC / 60.0 as DURATION_MINUTES,
-            t.URL,
-            ti.TRANSCRIPT_LENGTH,
-            YEAR(t.PUBLISHED_DATE) as PUBLISHED_YEAR
-        FROM ted_db.raw.ted_talks_raw t
-        LEFT JOIN transcript_info ti ON t.TALK_ID = ti.TALK_ID
-        WHERE 
-            LOWER(t.TITLE) LIKE LOWER('%{escaped_query}%')
-            OR LOWER(t.SPEAKERS) LIKE LOWER('%{escaped_query}%')
-            OR LOWER(t.TAGS) LIKE LOWER('%{escaped_query}%')
-            OR t.TALK_ID IN (SELECT TALK_ID FROM transcript_search)
-        ORDER BY t.PUBLISHED_DATE DESC
-    """
-    try:
-        df = session.sql(query).to_pandas()
-        return df
-    except Exception as e:
-        st.error(f"Error searching: {e}")
-        return pd.DataFrame()
 
 def log_search_history(user_id, search_query, results_count):
     """Log user search to database"""
@@ -289,322 +255,28 @@ def log_search_history(user_id, search_query, results_count):
     except:
         pass
 
-def log_watch_history(user_id, talk_id, watch_duration, total_duration):
-    """Log user watch activity"""
-    session = get_snowflake_session()
-    watch_id = str(uuid.uuid4())
-    watch_percentage = (watch_duration / total_duration * 100) if total_duration > 0 else 0
-    completed = 'TRUE' if watch_percentage >= 90 else 'FALSE'
-    
-    query = f"""
-        INSERT INTO ted_db.ted_schema_curated.user_watch_history 
-        (watch_id, user_id, talk_id, watch_duration_seconds, total_duration_seconds, 
-         watch_percentage, watched_at, completed)
-        VALUES ('{watch_id}', '{user_id}', '{talk_id}', {watch_duration}, {total_duration}, 
-                {watch_percentage}, CURRENT_TIMESTAMP(), {completed})
-    """
-    try:
-        session.sql(query).collect()
-    except:
-        pass
-
 def get_user_recommendations(user_id):
-    """Get personalized recommendations based on user's topics of interest"""
+    """Get personalized recommendations"""
     session = get_snowflake_session()
-    
-    # First, get user's topics of interest
-    try:
-        user_query = f"""
-            SELECT topics_of_interest 
-            FROM ted_db.ted_schema_curated.users
-            WHERE user_id = '{user_id}'
-        """
-        user_result = session.sql(user_query).collect()
-        
-        if user_result and len(user_result) > 0:
-            topics_of_interest = user_result[0]['TOPICS_OF_INTEREST']
-        else:
-            topics_of_interest = None
-    except:
-        topics_of_interest = None
-    
-    # Build query based on topics of interest
-    if topics_of_interest and topics_of_interest != 'Not specified':
-        # Convert topics string to searchable format
-        # e.g., "Science, Technology, Psychology" -> search for these in tags
-        topics_list = [topic.strip().lower() for topic in topics_of_interest.split(',')]
-        
-        # Build LIKE conditions for each topic
-        topic_conditions = " OR ".join([f"LOWER(t.TAGS) LIKE '%{topic}%'" for topic in topics_list])
-        
-        query = f"""
-            WITH watched_talks AS (
-                SELECT DISTINCT talk_id
-                FROM ted_db.ted_schema_curated.user_watch_history
-                WHERE user_id = '{user_id}'
-            ),
-            transcript_info AS (
-                SELECT 
-                    TALK_ID,
-                    COUNT(*) as segment_count
-                FROM ted_db.raw.ted_transcript_segments_raw
-                GROUP BY TALK_ID
-            ),
-            matching_talks AS (
-                SELECT 
-                    t.TALK_ID,
-                    t.TITLE,
-                    t.SPEAKERS as SPEAKER,
-                    t.TAGS,
-                    t.PUBLISHED_DATE,
-                    t.DURATION_SEC / 60.0 as DURATION_MINUTES,
-                    t.URL,
-                    YEAR(t.PUBLISHED_DATE) as PUBLISHED_YEAR
-                FROM ted_db.raw.ted_talks_raw t
-                INNER JOIN transcript_info ti ON t.TALK_ID = ti.TALK_ID
-                WHERE ({topic_conditions})
-                AND t.TALK_ID NOT IN (SELECT talk_id FROM watched_talks)
-                ORDER BY t.PUBLISHED_DATE DESC
-            )
-            SELECT * FROM matching_talks
-            LIMIT 9
-        """
-    else:
-        # Fallback to random talks if no topics specified
-        query = f"""
-            WITH watched_talks AS (
-                SELECT DISTINCT talk_id
-                FROM ted_db.ted_schema_curated.user_watch_history
-                WHERE user_id = '{user_id}'
-            ),
-            transcript_info AS (
-                SELECT 
-                    TALK_ID,
-                    COUNT(*) as segment_count
-                FROM ted_db.raw.ted_transcript_segments_raw
-                GROUP BY TALK_ID
-            )
-            SELECT 
-                t.TALK_ID,
-                t.TITLE,
-                t.SPEAKERS as SPEAKER,
-                t.TAGS,
-                t.PUBLISHED_DATE,
-                t.DURATION_SEC / 60.0 as DURATION_MINUTES,
-                t.URL,
-                YEAR(t.PUBLISHED_DATE) as PUBLISHED_YEAR
-            FROM ted_db.raw.ted_talks_raw t
-            INNER JOIN transcript_info ti ON t.TALK_ID = ti.TALK_ID
-            WHERE t.TALK_ID NOT IN (SELECT talk_id FROM watched_talks)
-            ORDER BY RANDOM()
-            LIMIT 9
-        """
-    
+    query = f"""
+        SELECT 
+            t.TALK_ID,
+            t.TITLE,
+            t.SPEAKERS as SPEAKER,
+            t.TAGS,
+            t.PUBLISHED_DATE,
+            t.DURATION_SEC / 60.0 as DURATION_MINUTES,
+            t.URL,
+            YEAR(t.PUBLISHED_DATE) as PUBLISHED_YEAR
+        FROM ted_db.raw.ted_talks_raw t
+        ORDER BY RANDOM()
+        LIMIT 9
+    """
     try:
         df = session.sql(query).to_pandas()
         return df
     except Exception as e:
-        st.error(f"Error getting recommendations: {e}")
-        # Fallback to all talks
         return get_all_talks().head(9)
-
-# ==================== AI AGENTS ====================
-
-def call_cortex_llm(prompt, model="mistral-large"):
-    """Call Snowflake Cortex LLM"""
-    session = get_snowflake_session()
-    escaped_prompt = prompt.replace("'", "''")
-    
-    if len(escaped_prompt) > 10000:
-        escaped_prompt = escaped_prompt[:10000] + "..."
-    
-    query = f"""
-        SELECT SNOWFLAKE.CORTEX.COMPLETE(
-            '{model}',
-            '{escaped_prompt}'
-        ) AS response
-    """
-    
-    try:
-        result = session.sql(query).collect()
-        return result[0]['RESPONSE']
-    except Exception as e:
-        return f"Error calling LLM: {str(e)}"
-
-def router_agent(user_query):
-    """Determine which agent should handle the query"""
-    query_lower = user_query.lower()
-    
-    summary_keywords = ['summary', 'summarize', 'overview', 'explain', 'what is', 'tell me about']
-    compare_keywords = ['compare', 'difference', 'versus', 'vs', 'contrast', 'similar']
-    recommend_keywords = ['recommend', 'find', 'suggest', 'show me', 'looking for', 'talks about', 'search']
-    
-    if any(keyword in query_lower for keyword in summary_keywords):
-        return 'summary'
-    elif any(keyword in query_lower for keyword in compare_keywords):
-        return 'compare'
-    elif any(keyword in query_lower for keyword in recommend_keywords):
-        return 'recommend'
-    else:
-        router_prompt = f"""You are a routing assistant. Analyze this query and respond with ONLY ONE WORD.
-
-Query: {user_query}
-
-Choose ONE:
-- summary (if asking about a specific talk's content)
-- compare (if comparing multiple talks)
-- recommend (if looking for talk suggestions)
-
-Response (one word only):"""
-        
-        response = call_cortex_llm(router_prompt, model="mistral-large").strip().lower()
-        
-        if 'summary' in response:
-            return 'summary'
-        elif 'compare' in response:
-            return 'compare'
-        else:
-            return 'recommend'
-
-def summary_agent(talk_id):
-    """Generate summary of a TED talk"""
-    talk = get_talk_by_id(talk_id)
-    
-    if talk is None:
-        return "Talk not found."
-    
-    transcript = talk['TRANSCRIPT']
-    title = talk['TITLE']
-    speaker = talk['SPEAKER']
-    
-    if pd.isna(transcript) or not transcript:
-        return f"No transcript available for '{title}' by {speaker}."
-    
-    max_transcript_length = 4000
-    truncated_transcript = transcript[:max_transcript_length]
-    if len(transcript) > max_transcript_length:
-        truncated_transcript += "..."
-    
-    summary_prompt = f"""Summarize this TED talk concisely.
-
-Title: {title}
-Speaker: {speaker}
-
-Transcript:
-{truncated_transcript}
-
-Provide a clear 3-4 paragraph summary covering:
-1. Main topic and thesis
-2. Key insights and arguments
-3. Practical takeaways
-
-Summary:"""
-    
-    summary = call_cortex_llm(summary_prompt, model="mistral-large")
-    
-    result = f"""### 📝 Summary: "{title}"
-**Speaker:** {speaker}
-
-{summary}
-"""
-    
-    return result
-
-def compare_agent(talk_titles):
-    """Compare two or more TED talks"""
-    if len(talk_titles) < 2:
-        return "Please provide at least 2 talk titles to compare."
-    
-    talks = []
-    for title in talk_titles:
-        talk = get_talk_by_title(title)
-        if talk is not None:
-            talks.append(talk)
-    
-    if len(talks) < 2:
-        return "Could not find enough talks. Please check the titles."
-    
-    talks_info = ""
-    for i, talk in enumerate(talks[:2], 1):
-        transcript_excerpt = talk['TRANSCRIPT'][:1000] if not pd.isna(talk['TRANSCRIPT']) else "No transcript"
-        
-        talks_info += f"""
-Talk {i}:
-Title: {talk['TITLE']}
-Speaker: {talk['SPEAKER']}
-Year: {talk['PUBLISHED_YEAR']}
-Tags: {talk['TAGS']}
-Transcript excerpt: {transcript_excerpt}...
-
-"""
-    
-    compare_prompt = f"""Compare these TED talks in detail:
-
-{talks_info}
-
-Provide a comparison covering:
-1. Main topics and themes
-2. Key similarities and differences in approach
-3. Unique insights from each talk
-4. Which audiences might prefer each talk
-
-Comparison:"""
-    
-    comparison = call_cortex_llm(compare_prompt, model="mistral-large")
-    
-    result = f"""### ⚖️ Comparison of TED Talks
-
-**Talk 1:** {talks[0]['TITLE']} by {talks[0]['SPEAKER']}
-**Talk 2:** {talks[1]['TITLE']} by {talks[1]['SPEAKER']}
-
-{comparison}
-"""
-    
-    return result
-
-def recommend_agent(user_query, user_id):
-    """Recommend TED talks based on query"""
-    talks_df = search_talks(user_query)
-    
-    if talks_df.empty:
-        return f"No talks found matching '{user_query}'. Try different keywords."
-    
-    result = f"### 🎯 Recommended TED Talks for: '{user_query}'\n\n"
-    
-    for idx, talk in talks_df.head(4).iterrows():
-        result += f"""**{idx+1}. {talk['TITLE']}**
-   - Speaker: {talk['SPEAKER']}
-   - Year: {talk['PUBLISHED_YEAR']} | Duration: {talk['DURATION_MINUTES']:.1f} min
-   - Tags: {talk['TAGS']}
-
-"""
-    
-    result += "\n💡 Click on any talk from the search results to watch!"
-    
-    return result
-
-def process_user_query(user_query, user_id, context=None):
-    """Main function to process user queries"""
-    
-    agent_type = router_agent(user_query)
-    
-    if agent_type == 'summary':
-        if context and 'talk_id' in context:
-            return summary_agent(context['talk_id'])
-        else:
-            return "To generate a summary, please watch a specific talk and click the 'Generate Summary' button."
-    
-    elif agent_type == 'compare':
-        if context and 'talk_titles' in context:
-            return compare_agent(context['talk_titles'])
-        else:
-            return "To compare talks, please go to the 'Compare Talks' page and select talks to compare."
-    
-    elif agent_type == 'recommend':
-        return recommend_agent(user_query, user_id)
-    
-    else:
-        return recommend_agent(user_query, user_id)
 
 # ==================== HELPER FUNCTIONS ====================
 
@@ -630,15 +302,9 @@ def get_topic_emoji(tags):
         'psychology': '🧠',
         'education': '🎓',
         'health': '🏥',
-        'biology': '🧬',
-        'animals': '🦎',
-        'environment': '🌍',
         'business': '💼',
         'art': '🎨',
-        'music': '🎵',
-        'design': '✨',
-        'entertainment': '🎭',
-        'creativity': '💡',
+        'environment': '🌍',
     }
     
     for keyword, emoji in emoji_map.items():
@@ -646,6 +312,102 @@ def get_topic_emoji(tags):
             return emoji
     
     return '🎤'
+
+# ==================== AI AGENT FUNCTIONS ====================
+
+def call_cortex_llm(prompt, model="mistral-large"):
+    """Call Snowflake Cortex LLM"""
+    session = get_snowflake_session()
+    escaped_prompt = prompt.replace("'", "''")
+    
+    if len(escaped_prompt) > 10000:
+        escaped_prompt = escaped_prompt[:10000] + "..."
+    
+    query = f"""
+        SELECT SNOWFLAKE.CORTEX.COMPLETE(
+            '{model}',
+            '{escaped_prompt}'
+        ) AS response
+    """
+    
+    try:
+        result = session.sql(query).collect()
+        return result[0]['RESPONSE']
+    except Exception as e:
+        return f"Error calling LLM: {str(e)}"
+
+def router_agent(user_query):
+    """Route user query to appropriate agent"""
+    query_lower = user_query.lower()
+    
+    if any(kw in query_lower for kw in ['summary', 'summarize']):
+        return 'summary'
+    elif any(kw in query_lower for kw in ['compare', 'versus', 'vs']):
+        return 'comparison'
+    else:
+        return 'recommendation'
+
+def summary_agent(talk_id):
+    """Generate summary of a talk"""
+    talk = get_talk_by_id(talk_id)
+    if talk is None:
+        return "Talk not found."
+    
+    prompt = f"Provide a brief summary of this TED talk: {talk['TITLE']} by {talk['SPEAKER']}"
+    summary = call_cortex_llm(prompt)
+    
+    return f"""### 📝 Summary: "{talk['TITLE']}"
+**Speaker:** {talk['SPEAKER']}
+
+{summary}
+"""
+
+def compare_agent(talk_titles):
+    """Compare two or more talks"""
+    if len(talk_titles) < 2:
+        return "Please provide at least 2 talks to compare."
+    
+    result = f"### ⚖️ Comparison of TED Talks\n\n"
+    result += f"Comparing: {' vs '.join(talk_titles)}\n\n"
+    result += "Comparison analysis will be generated using AI..."
+    
+    return result
+
+def process_user_query(user_query, user_id):
+    """Process user query through agent pipeline"""
+    agent_type = router_agent(user_query)
+    
+    if agent_type == 'summary':
+        return "To generate a summary, please select a specific talk."
+    elif agent_type == 'comparison':
+        return "To compare talks, please use the Compare Talks page."
+    else:
+        # Recommendation
+        talks_df = search_talks(user_query)
+        if talks_df.empty:
+            return f"No talks found matching '{user_query}'."
+        
+        result = f"### 🎯 Recommended Talks for: '{user_query}'\n\n"
+        for idx, (_, talk) in enumerate(talks_df.head(5).iterrows(), 1):
+            result += f"**{idx}. {talk['TITLE']}**\n"
+            result += f"   - Speaker: {talk['SPEAKER']}\n"
+            result += f"   - Year: {talk['PUBLISHED_YEAR']}\n\n"
+        
+        return result
+
+def log_watch_history(user_id, talk_id, watch_duration, total_duration):
+    """Log watch history"""
+    try:
+        session = get_snowflake_session()
+        watch_id = str(uuid.uuid4())
+        query = f"""
+            INSERT INTO ted_db.ted_schema_curated.user_watch_history 
+            (watch_id, user_id, talk_id, watch_duration_seconds, total_duration_seconds, watched_at)
+            VALUES ('{watch_id}', '{user_id}', '{talk_id}', {watch_duration}, {total_duration}, CURRENT_TIMESTAMP())
+        """
+        session.sql(query).collect()
+    except:
+        pass
 
 # ==================== UI PAGES ====================
 
@@ -859,7 +621,7 @@ def show_home_page():
     with col1:
         search_input = st.text_input(
             "search", 
-            placeholder="🔍 Search for TED talks...", 
+            placeholder="🔍 Search for TED talks or ask AI: 'Find talks about AI' / 'Compare creativity talks' / 'I want to learn everything about climate change'", 
             label_visibility="collapsed"
         )
     with col2:
@@ -867,10 +629,92 @@ def show_home_page():
     
     if search_button and search_input:
         st.session_state.search_query = search_input
-        st.session_state.current_page = 'search'
-        talks_df = search_talks(search_input)
-        log_search_history(st.session_state.user_id, search_input, len(talks_df))
-        st.rerun()
+        debug_log(f"Search initiated with query: '{search_input}'")
+        debug_log(f"User ID: {st.session_state.user_id}")
+        
+        # Debug panel
+        if st.session_state.debug_mode:
+            debug_panel = st.expander("🔍 Debug Execution Flow", expanded=True)
+        
+        # Run LangGraph agent pipeline
+        with st.spinner("🤖 AI Agent processing your request..."):
+            try:
+                debug_log("Step 1: Importing langgraph_agents module...")
+                from langgraph_agents import run_agent_pipeline
+                debug_log("✓ Module imported successfully", "SUCCESS")
+                
+                debug_log("Step 2: Calling run_agent_pipeline()...")
+                result = run_agent_pipeline(search_input, st.session_state.user_id)
+                debug_log(f"✓ Pipeline execution completed. Success: {result['success']}", "SUCCESS")
+                
+                if result['success']:
+                    # Show agent type
+                    agent_type = result['agent_type'].upper()
+                    debug_log(f"Step 3: Routed to {agent_type} Agent", "SUCCESS")
+                    st.info(f"Routed to: **{agent_type} Agent**")
+                    
+                    # Show search results count
+                    results_count = len(result.get('search_results', []))
+                    debug_log(f"Step 4: Found {results_count} search results")
+                    
+                    # Show output
+                    debug_log("Step 5: Displaying agent output...")
+                    st.markdown(result['output'])
+                    debug_log("✓ Output displayed", "SUCCESS")
+                    
+                    # Log search history
+                    debug_log("Step 6: Logging search history to Snowflake...")
+                    try:
+                        log_search_history(
+                            st.session_state.user_id, 
+                            search_input, 
+                            results_count
+                        )
+                        debug_log("✓ Search logged successfully", "SUCCESS")
+                    except Exception as log_error:
+                        debug_log(f"Warning: Failed to log search history: {log_error}", "WARNING")
+                    
+                    # Store in session for reference
+                    if 'search_history' not in st.session_state:
+                        st.session_state.search_history = []
+                    st.session_state.search_history.append({
+                        'query': search_input,
+                        'agent': result['agent_type'],
+                        'output': result['output']
+                    })
+                    debug_log("Step 7: Stored in session state", "SUCCESS")
+                else:
+                    error_msg = result.get('error', 'Unknown error')
+                    debug_log(f"Agent pipeline failed: {error_msg}", "ERROR")
+                    st.error(f"Error: {error_msg}")
+                    
+            except ImportError as ie:
+                debug_log(f"ImportError: LangGraph not available - {str(ie)}", "WARNING")
+                debug_log("Falling back to simple search mode...")
+                # Fallback to simple search if LangGraph not available
+                st.warning("⚠️ LangGraph not available. Using simple search mode.")
+                st.session_state.current_page = 'search'
+                try:
+                    talks_df = search_talks(search_input)
+                    log_search_history(st.session_state.user_id, search_input, len(talks_df))
+                    debug_log(f"Simple search completed: {len(talks_df)} results", "SUCCESS")
+                except Exception as search_error:
+                    debug_log(f"Simple search failed: {str(search_error)}", "ERROR")
+                st.rerun()
+                
+            except Exception as e:
+                debug_log(f"Unexpected error in agent pipeline: {str(e)}", "ERROR")
+                st.error(f"❌ Error processing request: {e}")
+                debug_log("Attempting fallback to simple search...")
+                # Fallback
+                st.session_state.current_page = 'search'
+                try:
+                    talks_df = search_talks(search_input)
+                    log_search_history(st.session_state.user_id, search_input, len(talks_df))
+                    debug_log("Fallback search successful", "SUCCESS")
+                except Exception as fallback_error:
+                    debug_log(f"Fallback search failed: {str(fallback_error)}", "ERROR")
+                st.rerun()
     
     st.markdown("<br>", unsafe_allow_html=True)
     
@@ -967,17 +811,17 @@ def show_search_results():
     st.markdown(f"*'{st.session_state.search_query}'*")
     st.markdown("---")
     
-    col1, col2 = st.columns([2, 8])
-    with col1:
-        if st.button("← Back", use_container_width=True):
-            st.session_state.current_page = 'home'
-            st.rerun()
+    if st.button("← Back to Home"):
+        st.session_state.current_page = 'home'
+        st.rerun()
     
-    with st.spinner("Searching..."):
+    st.markdown("---")
+    
+    with st.spinner("Searching for talks..."):
         filtered_talks = search_talks(st.session_state.search_query)
     
     if not filtered_talks.empty:
-        st.markdown(f"### Found {len(filtered_talks)} talk(s)")
+        st.success(f"### ✅ Found {len(filtered_talks)} talk(s)")
         st.markdown("---")
         
         for idx, (_, talk) in enumerate(filtered_talks.iterrows()):
@@ -987,15 +831,19 @@ def show_search_results():
             col1, col2 = st.columns([8, 2])
             with col1:
                 st.markdown(f"### {emoji} {talk['TITLE']}")
-                st.markdown(f"**{talk['SPEAKER']}** • {talk['PUBLISHED_YEAR']} • {duration}")
+                st.markdown(f"**Speaker:** {talk['SPEAKER']} • **Year:** {talk['PUBLISHED_YEAR']} • **Duration:** {duration}")
+                if not pd.isna(talk['TAGS']) and talk['TAGS']:
+                    st.caption(f"Tags: {talk['TAGS']}")
             with col2:
+                st.markdown("<br>", unsafe_allow_html=True)
                 if st.button("▶️ Watch", key=f"search_{idx}", use_container_width=True):
                     st.session_state.selected_talk = talk['TALK_ID']
                     st.session_state.current_page = 'talk_detail'
                     st.rerun()
             st.markdown("---")
     else:
-        st.warning(f"No talks found for '{st.session_state.search_query}'")
+        st.warning(f"❌ No talks found for '{st.session_state.search_query}'")
+        st.info("Try different keywords or check your spelling.")
 
 def show_talk_detail():
     """Talk detail page with video and summary"""
@@ -1128,6 +976,15 @@ def show_ai_assistant():
     st.title("🤖 AI Assistant")
     st.markdown("Ask me anything about TED talks!")
     st.markdown("---")
+
+    if 'last_ai_response' not in st.session_state:
+        st.session_state.last_ai_response = None
+        st.session_state.last_ai_question = None
+    if 'last_agent' not in st.session_state:
+        st.session_state.last_agent = None
+    if not st.session_state.get('user_id'):
+        st.warning("Please log in before asking a question.")
+        return
     
     user_input = st.text_area(
         "Your question:",
@@ -1138,16 +995,29 @@ def show_ai_assistant():
     
     if st.button("Send", type="primary", use_container_width=True) and user_input:
         with st.spinner("Processing..."):
-            result = process_user_query(user_input, st.session_state.user_id)
-            
-            st.markdown("---")
-            st.markdown("### Response:")
-            st.markdown(result)
-            
+            agent = None
+            try:
+                agent = router_agent(user_input)
+                st.session_state.last_agent = agent
+                result = process_user_query(user_input, st.session_state.user_id)
+            except Exception as e:
+                result = f"Error while processing your question: {e}"
+                st.error(result)
+            st.session_state.last_ai_question = user_input
+            st.session_state.last_ai_response = result
             st.session_state.chat_history.append({
                 "user": user_input,
                 "assistant": result
             })
+
+    if st.session_state.last_ai_response:
+        st.markdown("---")
+        st.markdown("### Response:")
+        if st.session_state.last_agent:
+            st.info(f"Routed to: {st.session_state.last_agent}")
+        if st.session_state.last_ai_question:
+            st.markdown(f"**You:** {st.session_state.last_ai_question}")
+        st.markdown(st.session_state.last_ai_response)
     
     if st.session_state.chat_history:
         st.markdown("---")
@@ -1192,6 +1062,44 @@ def main():
         main_app()
     else:
         login_page()
+    
+    # Debug Panel at bottom (always visible in debug mode)
+    if st.session_state.get('debug_mode', False):
+        st.markdown("---")
+        st.markdown("## 🔍 Debug Information")
+        
+        # Debug controls
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            if st.button("🗑️ Clear Debug Logs"):
+                st.session_state.debug_logs = []
+                st.rerun()
+        with col2:
+            if st.button("🔄 Toggle Debug Mode"):
+                st.session_state.debug_mode = not st.session_state.debug_mode
+                st.rerun()
+        with col3:
+            st.write(f"**Status:** {'✅ ON' if st.session_state.debug_mode else '❌ OFF'}")
+        
+        # Session state viewer
+        with st.expander("📊 Session State", expanded=False):
+            session_info = {
+                'logged_in': st.session_state.get('logged_in'),
+                'username': st.session_state.get('username'),
+                'user_id': st.session_state.get('user_id'),
+                'current_page': st.session_state.get('current_page'),
+                'search_query': st.session_state.get('search_query'),
+                'selected_talk': st.session_state.get('selected_talk'),
+            }
+            st.json(session_info)
+        
+        # Debug logs viewer
+        with st.expander(f"📝 Debug Logs ({len(st.session_state.get('debug_logs', []))} entries)", expanded=False):
+            if st.session_state.debug_logs:
+                for log in reversed(st.session_state.debug_logs[-50:]):  # Show last 50
+                    st.text(log)
+            else:
+                st.info("No debug logs yet")
 
 if __name__ == "__main__":
     main()
