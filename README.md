@@ -19,6 +19,7 @@
 
 - [Overview](#-overview)
 - [Key Features](#-key-features)
+- [AI Safety & Guardrails](#-ai-safety--guardrails)
 - [System Architecture](#-system-architecture)
 - [Agent Pipelines](#-agent-pipelines)
 - [Technology Stack](#-technology-stack)
@@ -53,6 +54,22 @@
 | **📝 Video Summaries** | Get key takeaways from any talk's transcript |
 | **💬 Chat Persistence** | Auto-saved conversations with LLM-generated titles |
 | **👤 Personalization** | Saved playlists and search history tracking |
+
+---
+
+## 🛡️ AI Safety & Guardrails
+
+The system implements strict guardrails to ensure production-grade safety and reliability, adhering to **Responsible AI** principles:
+
+| Guardrail Layer | Implementation |
+|-----------------|----------------|
+| **1️⃣ Input Validation** | Reject meaningless, malformed, or unsafe inputs before they reach the router. |
+| **2️⃣ Router Confidence** | Conservative routing fallback (Unknown Agent) if intent is ambiguous. No guessing. |
+| **3️⃣ Grounding** | QA & Summarization agents are constrained strictly to transcript evidence to prevent hallucinations. |
+| **4️⃣ Output Sanitization** | Automatic removal of internal system terminology and strict professional tone enforcement. |
+| **5️⃣ State Safety** | Robust state validation ensures the application never crashes due to missing data. |
+
+> *"Deliberately limited, not broken."* — The system prioritizes correctness over creativity.
 
 ---
 
