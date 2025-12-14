@@ -19,6 +19,7 @@
 
 - [Overview](#-overview)
 - [Key Features](#-key-features)
+- [AI Safety & Guardrails](#-ai-safety--guardrails)
 - [System Architecture](#-system-architecture)
 - [Agent Pipelines](#-agent-pipelines)
 - [Technology Stack](#-technology-stack)
@@ -52,7 +53,23 @@
 | **❓ Grounded Q&A** | Ask questions about specific talks with evidence-backed answers |
 | **📝 Video Summaries** | Get key takeaways from any talk's transcript |
 | **💬 Chat Persistence** | Auto-saved conversations with LLM-generated titles |
-| **👤 Personalization** | Watch history and favorites for refined recommendations |
+| **👤 Personalization** | Saved playlists and search history tracking |
+
+---
+
+## 🛡️ AI Safety & Guardrails
+
+The system implements strict guardrails to ensure production-grade safety and reliability, adhering to **Responsible AI** principles:
+
+| Guardrail Layer | Implementation |
+|-----------------|----------------|
+| **1️⃣ Input Validation** | Reject meaningless, malformed, or unsafe inputs before they reach the router. |
+| **2️⃣ Router Confidence** | Conservative routing fallback (Unknown Agent) if intent is ambiguous. No guessing. |
+| **3️⃣ Grounding** | QA & Summarization agents are constrained strictly to transcript evidence to prevent hallucinations. |
+| **4️⃣ Output Sanitization** | Automatic removal of internal system terminology and strict professional tone enforcement. |
+| **5️⃣ State Safety** | Robust state validation ensures the application never crashes due to missing data. |
+
+> *"Deliberately limited, not broken."* — The system prioritizes correctness over creativity.
 
 ---
 
@@ -62,20 +79,34 @@
 
 ```mermaid
 graph TD
-    subgraph "Data Layer"
+    subgraph "Data Ingestion"
         S3[(AWS S3)] --> Airflow[Apache Airflow]
-        Airflow --> SF[(Snowflake RAW)]
-        SF --> DBT[DBT Transformation]
-        DBT --> Curated[(Curated Layer)]
-        Curated --> Cortex[Snowflake Cortex]
-        Cortex --> Embeddings[(Vector Embeddings)]
+    end
+    
+    subgraph SNOWFLAKE["☁️ Snowflake Data Cloud"]
+        subgraph SCHEMAS["Database Schemas (TED_DB)"]
+            RAW[(RAW)]
+            CURATED[(CURATED)]
+            SEMANTIC[(SEMANTIC)]
+            APP[(APP)]
+        end
+        
+        CORTEX[🧠 Snowflake Cortex AI]
+        
+        Airflow --> RAW
+        RAW --> DBT[DBT]
+        DBT --> CURATED
+        DBT --> SEMANTIC
+        CORTEX -.->|Vector Embeddings| SEMANTIC
+        CORTEX -.->|LLM Inference| Agents
     end
     
     subgraph "Application Layer"
-        UI[Streamlit UI] --> LG[LangGraph Orchestrator]
+        UI[Streamlit UI] --> LG[LangGraph]
         LG --> Agents[Agent Network]
-        Agents --> Cortex
-        Agents --> Embeddings
+        Agents --> CURATED
+        Agents --> SEMANTIC
+        Agents --> APP
     end
     
     User((User)) --> UI
@@ -129,11 +160,11 @@ graph LR
     C --> D[Personalized<br/>Reasoning]
     D --> E[Formatted<br/>Output]
     
-    style A fill:#e1f5fe
-    style B fill:#e1f5fe
-    style C fill:#fff3e0
-    style D fill:#fff3e0
-    style E fill:#e8f5e9
+    style A fill:#1e3a5f,color:#fff
+    style B fill:#1e3a5f,color:#fff
+    style C fill:#5c3d2e,color:#fff
+    style D fill:#5c3d2e,color:#fff
+    style E fill:#2e5a3e,color:#fff
 ```
 
 **Agents Involved:**
@@ -155,11 +186,11 @@ graph LR
     C --> D[Sequencing]
     D --> E[Learning<br/>Pathway]
     
-    style A fill:#e1f5fe
-    style B fill:#e1f5fe
-    style C fill:#fff3e0
-    style D fill:#fff3e0
-    style E fill:#e8f5e9
+    style A fill:#1e3a5f,color:#fff
+    style B fill:#1e3a5f,color:#fff
+    style C fill:#5c3d2e,color:#fff
+    style D fill:#5c3d2e,color:#fff
+    style E fill:#2e5a3e,color:#fff
 ```
 
 **Output Structure:**
@@ -179,11 +210,11 @@ graph LR
     C --> D[Matrix<br/>Generation]
     D --> E[Comparison<br/>Table]
     
-    style A fill:#e1f5fe
-    style B fill:#e1f5fe
-    style C fill:#fff3e0
-    style D fill:#fff3e0
-    style E fill:#e8f5e9
+    style A fill:#1e3a5f,color:#fff
+    style B fill:#1e3a5f,color:#fff
+    style C fill:#5c3d2e,color:#fff
+    style D fill:#5c3d2e,color:#fff
+    style E fill:#2e5a3e,color:#fff
 ```
 
 **Comparison Dimensions:**
@@ -205,10 +236,10 @@ graph LR
     B --> C[Evidence<br/>Extraction]
     C --> D[Grounded<br/>Answer]
     
-    style A fill:#e1f5fe
-    style B fill:#e1f5fe
-    style C fill:#fff3e0
-    style D fill:#e8f5e9
+    style A fill:#1e3a5f,color:#fff
+    style B fill:#1e3a5f,color:#fff
+    style C fill:#5c3d2e,color:#fff
+    style D fill:#2e5a3e,color:#fff
 ```
 
 **Key Innovation:** Answers are **grounded** in transcript evidence. No hallucinations—if it's not in the talk, the system says so.
