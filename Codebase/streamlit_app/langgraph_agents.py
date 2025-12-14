@@ -12,6 +12,7 @@ from typing import TypedDict, List, Dict, Any, Optional, Literal
 import json
 import re
 from db import call_cortex_llm, search_talks
+<<<<<<< HEAD
 import logging
 
 # ==================== GUARDRAILS MODULE ====================
@@ -173,6 +174,8 @@ def scope_disclaimer() -> str:
         "I'm designed to help you explore TED Talk content. "
         "For questions outside this scope, I may not be able to provide accurate answers."
     )
+=======
+>>>>>>> 137e32497b150395531ba55e991498158f5f2ca4
 
 # ==================== STATE DEFINITION ====================
 
@@ -200,19 +203,32 @@ def router_agent_node(state: AgentState) -> AgentState:
     0. Router Agent
     Responsibility: Analyze query and route to correct downstream agent.
     """
+<<<<<<< HEAD
     user_progress("Analyzing your request...")
     
     prompt = f"""
     You are a routing classifier for a TED Talks assistant.
     Analyze the user query and classify intent:
+=======
+    st.write("Processing your request...")
+    
+    prompt = f"""
+    You are a Router Agent in a LangGraph multi-agent system.
+    Analyze the user query and route to:
+>>>>>>> 137e32497b150395531ba55e991498158f5f2ca4
     - 'recommendation_agent': For browsing, lists, suggestions, "best talks on X".
     - 'playlist_agent': For learning paths, curriculums, "learn X in order", "beginner to advanced".
     - 'comparison_agent': For comparing multiple talks, "vs", "difference between X and Y".
     - 'qa_specific_talk': For asking a question about a SPECIFIC video/talk. User MUST mention the video/speaker.
+<<<<<<< HEAD
     - 'summarize_talk': For requesting a summary, TLDR, or key takeaways of a specific video.
     - 'unknown': If intent is unclear, unsupported, or not related to TED Talks.
     
     IMPORTANT: When uncertain, prefer 'unknown' over guessing. Be conservative.
+=======
+    - 'summarize_talk': For requesting a summary, summary, TLDR, or key takeaways of a specific video.
+    - 'unknown': If intent is unclear or unsupported.
+>>>>>>> 137e32497b150395531ba55e991498158f5f2ca4
     
     User Query: "{state['user_query']}"
     
@@ -220,15 +236,22 @@ def router_agent_node(state: AgentState) -> AgentState:
     {{
         "destination": "recommendation_agent" | "playlist_agent" | "comparison_agent" | "qa_specific_talk" | "summarize_talk" | "unknown",
         "primary_topic": "string",
+<<<<<<< HEAD
         "target_talk": "string (Title or Speaker mentioned for QA/Sum, or empty)",
         "confidence": "high" | "medium" | "low",
+=======
+        "target_talk": "string (Title or Speaker mentioned for QA/Sum)",
+>>>>>>> 137e32497b150395531ba55e991498158f5f2ca4
         "constraints": ["string"]
     }}
     """
     
     try:
         response = call_cortex_llm(prompt, model="llama3.1-405b")
+<<<<<<< HEAD
         log_internal(f"Router raw response: {response[:200]}")
+=======
+>>>>>>> 137e32497b150395531ba55e991498158f5f2ca4
         
         # Parse JSON
         json_str = response.strip()
@@ -239,6 +262,7 @@ def router_agent_node(state: AgentState) -> AgentState:
         
         data = json.loads(json_str)
         
+<<<<<<< HEAD
         # === GUARDRAIL: Routing Confidence Check ===
         if not validate_routing_confidence(data):
             log_internal(f"Routing confidence check failed: {data}")
@@ -264,6 +288,21 @@ def router_agent_node(state: AgentState) -> AgentState:
         log_internal(f"Router error: {e}", "error")
         state['routing_decision'] = 'unknown'
         state['router_metadata'] = {"error": "routing_failed"}
+=======
+        state['routing_decision'] = data.get('destination', 'unknown')
+        state['router_metadata'] = {
+            "topic": data.get('primary_topic'),
+            "target_talk": data.get('target_talk'), # Extracted identifier
+            "constraints": data.get('constraints', [])
+        }
+        
+        st.write(f"Routing to specialty agent: `{state['routing_decision']}`")
+        
+    except Exception as e:
+        st.error(f"⚠️ ROUTER Error: {e}")
+        state['routing_decision'] = "recommendation_agent" # Default fallback
+        state['router_metadata'] = {}
+>>>>>>> 137e32497b150395531ba55e991498158f5f2ca4
 
     return state
 
@@ -343,6 +382,7 @@ def unknown_agent_node(state: AgentState) -> AgentState:
     """
     Branch B: Unknown/Fallback
     Responsibility: Handle unclear or out-of-scope requests gracefully.
+<<<<<<< HEAD
     GUARDRAIL: Never sound like an error - explain scope clearly.
     """
     # === GUARDRAIL: User-friendly progress (no internal terms) ===
@@ -371,6 +411,24 @@ I specialize in **TED Talk discovery and analysis**. Here are some things I can 
 > "Summarize 'Do schools kill creativity'"
 
 Try one of these approaches, and I'll do my best to help!
+=======
+    """
+    st.write("❓ UNKNOWN: Handling unclear request...")
+    
+    # Templated, polite response guiding user to supported features
+    response = """
+### Thanks for your question!  
+This assistant is currently designed to specialize in **TED Talk** content.
+
+I can help you with:
+- 🔍 **Recommendations**: "Best talks about AI", "Inspiring videos for leaders"
+- 📚 **Learning Playlists**: "Create a 5-step learning path for Python"
+- 🔎 **Comparisons**: "Compare the talks by Simon Sinek and Brene Brown"
+- ❓ **Q&A**: "What does Bill Gates say about climate change?"
+- 📝 **Summaries**: "Summarize the video 'Do schools kill creativity'"
+
+If you’d like, try rephrasing your request using one of these options!
+>>>>>>> 137e32497b150395531ba55e991498158f5f2ca4
     """
     
     state['final_output'] = response.strip()
@@ -675,10 +733,15 @@ def video_summarization_agent_node(state: AgentState) -> AgentState:
     """
     Video Summarization Agent
     Generates a grounded summary strictly from the transcript.
+<<<<<<< HEAD
     GUARDRAIL: Use ONLY transcript content, no external knowledge.
     """
     # === GUARDRAIL: User-friendly progress ===
     user_progress("Reading the video transcript...")
+=======
+    """
+    st.write("Reading transcript and generating summary...")
+>>>>>>> 137e32497b150395531ba55e991498158f5f2ca4
     
     transcript = state['router_metadata'].get('transcript')
     title = state['router_metadata'].get('resolved_talk_title', 'Selected Video')
@@ -899,6 +962,7 @@ def build_graph():
     return workflow.compile()
 
 def run_agent_pipeline(user_query: str, user_id: str) -> Dict[str, Any]:
+<<<<<<< HEAD
     """
     Execute Pipeline with Guardrails
     Input validation -> Agent execution -> Output sanitization
@@ -922,11 +986,18 @@ def run_agent_pipeline(user_query: str, user_id: str) -> Dict[str, Any]:
     
     initial_state = AgentState(
         user_query=clean_query, user_id=user_id,
+=======
+    """Execute Pipeline"""
+    app = build_graph()
+    initial_state = AgentState(
+        user_query=user_query, user_id=user_id,
+>>>>>>> 137e32497b150395531ba55e991498158f5f2ca4
         routing_decision="", router_metadata={},
         intent={}, candidates=[], ranked_talks=[],
         playlist_plan={}, final_output="", error=None
     )
     
+<<<<<<< HEAD
     try:
         final = app.invoke(initial_state)
         # === GUARDRAIL: Ensure state is safe ===
@@ -945,6 +1016,18 @@ def run_agent_pipeline(user_query: str, user_id: str) -> Dict[str, Any]:
             "output": format_error_gracefully(e, "agent pipeline"),
             "agent_type": "error"
         }
+=======
+    if app:
+        try:
+            final = app.invoke(initial_state)
+            return {"success": True, "output": final['final_output'], "agent_type": "router"}
+        except Exception as e:
+            return {"success": False, "output": f"Error: {e}", "agent_type": "error"}
+    
+    return state
+    
+    return {"success": False, "output": "LangGraph missing.", "agent_type": "error"}
+>>>>>>> 137e32497b150395531ba55e991498158f5f2ca4
 
 # ==================== QA RETRIEVAL PIPELINE (PHASE 13) ====================
 

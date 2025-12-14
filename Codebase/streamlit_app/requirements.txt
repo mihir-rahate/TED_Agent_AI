@@ -1,3 +1,7 @@
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD:Codebase/streamlit_app/requirements.txt
+>>>>>>> 137e32497b150395531ba55e991498158f5f2ca4
 streamlit==1.26.0
 python-dotenv==1.0.0
 openai==1.0.0
@@ -5,3 +9,11 @@ pandas>=1.5.0
 langgraph>=0.0.20
 snowflake-snowpark-python>=1.11.0
 cryptography>=41.0.0
+<<<<<<< HEAD
+=======
+=======
+streamlit==1.26.0
+python-dotenv==1.0.0
+openai==1.0.0
+>>>>>>> 1806c4ffd3ae2605d611caecbc225fc76e5c2dd0:Codebase/streamlit_app/GAOS4_PXZ8982JW8/requirements.txt
+>>>>>>> 137e32497b150395531ba55e991498158f5f2ca4
