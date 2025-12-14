@@ -1,0 +1,33 @@
+services:
+  dbt:
+    build: .
+    container_name: dbt-snowflake
+    working_dir: /usr/app
+    volumes:
+      - ./:/usr/app
+
+    environment:
+      SNOWFLAKE_ACCOUNT: VOB68402
+      SNOWFLAKE_USER: GIRAFFE
+      SNOWFLAKE_ROLE: TRAINING_ROLE
+      SNOWFLAKE_DATABASE: TED_DB
+      SNOWFLAKE_WAREHOUSE: TED_AGENT_WH
+      SNOWFLAKE_SCHEMA: RAW
+      DBT_PROFILES_DIR: /usr/app/profiles   # explicit (even though Dockerfile sets it)
+
+      # SNOWFLAKE_PASSPHRASE: your_passphrase_here  # if using encrypted key
+
+    tty: true
+    command: ["--help"]
+
+  dbt-docs:
+    build: .
+    container_name: dbt-docs
+    working_dir: /usr/app
+    volumes:
+      - ./:/usr/app
+    environment:
+      DBT_PROFILES_DIR: /usr/app/profiles
+    command: ["docs", "serve", "--no-browser", "--port", "8080"]
+    ports:
+      - "8080:8080"

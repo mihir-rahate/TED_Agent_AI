@@ -1,0 +1,17 @@
+
+snowflake:
+  target: dev
+  outputs:
+    dev:
+      type: snowflake
+      account: VOB68402
+      user: GIRAFFE
+      role: TRAINING_ROLE
+      database: TED_DB
+      warehouse: TED_AGENT_WH
+      schema: RAW
+
+      # --- key pair authentication ---
+      private_key_path: snowflake_key.pem
+      # If your key has no passphrase, remove private_key_passphrase
+

@@ -1,0 +1,98 @@
+version: '3'
+services:
+  postgres:
+    image: postgres:13
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U airflow" ]
+      interval: 10s
+      retries: 5
+      timeout: 5s
+    volumes:
+      - ./postgres_data:/var/lib/postgresql/data
+
+  webserver:
+    build: .
+    env_file:
+      - .env
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
+      AIRFLOW__CORE__FERNET_KEY: "${FERNET_KEY}"
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+
+      # # Enable connection testing
+      # AIRFLOW__API__AUTH_BACKENDS: airflow.api.auth.backend.basic_auth
+      # AIRFLOW__WEBSERVER__EXPOSE_CONFIG: "true"
+      # AIRFLOW__WEBSERVER__RBAC: "false"
+
+      # Additional settings for connection testing
+      AIRFLOW_WEBSERVER_EXPOSE_CONFIG: "true"
+      AIRFLOW_API_FNABLE_RBAC: "false"
+      AIRFLOW_WEBSERVER_EXPOSE_HOSTNAME: "true"
+      AIRFLOW_WEBSERVER_EXPOSE_STACKTRACE: "true"
+
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./logs:/opt/airflow/logs
+      - ./plugins:/opt/airflow/plugins
+      - ./scripts:/opt/airflow/scripts
+      - ./PoC:/opt/airflow/data
+      - ../common:/opt/airflow/common
+      - ../dbt:/opt/airflow/dbt
+      - ./requirements.txt:/requirements.txt
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD", "curl", "--fail", "http://localhost:8080/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    command: >
+      bash -c "
+        pip install --upgrade pip &&
+        pip install -r /requirements.txt &&
+        airflow db init &&
+        (airflow users create --username ${AIRFLOW_ADMIN_USER:-admin} --password ${AIRFLOW_ADMIN_PASSWORD:-admin} --firstname Admin --lastname User --role Admin --email admin@example.com || true) &&
+        airflow webserver
+      "
+
+  scheduler:
+    build: .
+    env_file:
+      - .env
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
+      AIRFLOW__CORE__FERNET_KEY: "${FERNET_KEY}"
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./logs:/opt/airflow/logs
+      - ./plugins:/opt/airflow/plugins
+      - ./scripts:/opt/airflow/scripts
+      - ./PoC:/opt/airflow/data
+      - ../common:/opt/airflow/common
+      - ../dbt:/opt/airflow/dbt
+      - ./requirements.txt:/requirements.txt
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD-SHELL", 'airflow jobs check --job-type SchedulerJob --hostname "$${HOSTNAME}"' ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    command: >
+      bash -c "
+        pip install -r /requirements.txt &&
+        airflow scheduler
+      "

@@ -1,0 +1,14 @@
+version: "1"
+context:
+  active-host: "cw907.us1.dbt.com"
+  active-project: "70471823529856"
+projects:
+  - project-name: "Team 1"
+    project-id: "70471823529856"
+    account-name: "Northeastern University"
+    account-id: "70471823513718"
+    account-host: "cw907.us1.dbt.com"
+    token-name: "cloud-cli-a307"
+    token-value: "dbtu_f6scwhw9b9b3a-ZVMAOideD7rZbRGOLyAPfoQUR6mwNoRcGaaY"
+
+
