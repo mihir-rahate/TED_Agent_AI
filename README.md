@@ -52,7 +52,7 @@
 | **❓ Grounded Q&A** | Ask questions about specific talks with evidence-backed answers |
 | **📝 Video Summaries** | Get key takeaways from any talk's transcript |
 | **💬 Chat Persistence** | Auto-saved conversations with LLM-generated titles |
-| **👤 Personalization** | Watch history and favorites for refined recommendations |
+| **👤 Personalization** | Saved playlists and search history tracking |
 
 ---
 
@@ -62,20 +62,28 @@
 
 ```mermaid
 graph TD
-    subgraph "Data Layer"
+    subgraph "Data Ingestion"
         S3[(AWS S3)] --> Airflow[Apache Airflow]
-        Airflow --> SF[(Snowflake RAW)]
-        SF --> DBT[DBT Transformation]
-        DBT --> Curated[(Curated Layer)]
-        Curated --> Cortex[Snowflake Cortex]
-        Cortex --> Embeddings[(Vector Embeddings)]
+    end
+    
+    subgraph "Snowflake Platform"
+        Airflow --> RAW[(RAW Schema)]
+        RAW --> DBT[DBT Transformation]
+        DBT --> CURATED[(CURATED Schema)]
+        DBT --> SEMANTIC[(SEMANTIC Schema)]
+        CURATED --> APP[(APP Schema)]
+        
+        CORTEX[Snowflake Cortex AI]
+        CORTEX -.->|Embeddings| SEMANTIC
+        CORTEX -.->|LLM Inference| Agents
     end
     
     subgraph "Application Layer"
         UI[Streamlit UI] --> LG[LangGraph Orchestrator]
         LG --> Agents[Agent Network]
-        Agents --> Cortex
-        Agents --> Embeddings
+        Agents --> CURATED
+        Agents --> SEMANTIC
+        Agents --> APP
     end
     
     User((User)) --> UI
